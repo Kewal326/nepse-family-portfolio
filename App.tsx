@@ -34,7 +34,7 @@ type Holding = {
   raw?: unknown;
 };
 
-type SortOption = 'profit' | 'loss' | 'invested' | 'value';
+type SortOption = 'profit-value' | 'profit-pct' | 'loss-value' | 'loss-pct' | 'invested' | 'value';
 
 type PriceQuote = {
   symbol: string;
@@ -2283,12 +2283,17 @@ function holdingSortValue(holding: Holding, sortOption: SortOption) {
   const invested = holding.quantity * holding.averageCost;
   const value = holding.quantity * holding.ltp;
   const profitLoss = value - invested;
+  const profitLossPct = invested > 0 ? profitLoss / invested : 0;
 
   switch (sortOption) {
-    case 'profit':
+    case 'profit-value':
       return profitLoss;
-    case 'loss':
+    case 'profit-pct':
+      return profitLossPct;
+    case 'loss-value':
       return -profitLoss;
+    case 'loss-pct':
+      return -profitLossPct;
     case 'invested':
       return invested;
     case 'value':
@@ -5350,10 +5355,14 @@ export default function App() {
 
   function sortOptionLabel(sortOption: SortOption) {
     switch (sortOption) {
-      case 'profit':
-        return 'Profit';
-      case 'loss':
-        return 'Loss';
+      case 'profit-value':
+        return 'Profit Rs.';
+      case 'profit-pct':
+        return 'Profit %';
+      case 'loss-value':
+        return 'Loss Rs.';
+      case 'loss-pct':
+        return 'Loss %';
       case 'invested':
         return 'Invested';
       case 'value':
@@ -5378,8 +5387,10 @@ export default function App() {
   }) {
     const isSortOpen = openSortScope === scope;
     const sortOptions: Array<{ value: SortOption; label: string }> = [
-      { value: 'profit', label: 'Sort by profit' },
-      { value: 'loss', label: 'Sort by loss' },
+      { value: 'profit-value', label: 'Sort by profit (Rs.)' },
+      { value: 'profit-pct', label: 'Sort by profit (%)' },
+      { value: 'loss-value', label: 'Sort by loss (Rs.)' },
+      { value: 'loss-pct', label: 'Sort by loss (%)' },
       { value: 'invested', label: 'Sort by invested' },
       { value: 'value', label: 'Sort by current value' },
     ];
@@ -5392,11 +5403,11 @@ export default function App() {
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Sort shares"
+            accessibilityLabel={`Sort: ${sortOptionLabel(sortOption)}`}
             onPress={() => setOpenSortScope(isSortOpen ? null : scope)}
-            style={styles.sortButton}
+            style={[styles.sortButton, sortOption !== 'value' && styles.sortButtonActive]}
           >
-            <Text style={styles.sortButtonText}>Sort: {sortOptionLabel(sortOption)}</Text>
+            <Text style={styles.sortButtonText}>⇅</Text>
           </Pressable>
         </View>
         {isSortOpen ? (
@@ -5532,7 +5543,7 @@ export default function App() {
             placeholder="Search by symbol or company"
             placeholderTextColor="#8a8d9a"
             returnKeyType="search"
-            style={styles.shareSearchInput}
+            style={[styles.shareSearchInput, { marginBottom: 12 }]}
             value={searchValue}
           />
 
@@ -6317,7 +6328,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     justifyContent: 'center',
     letterSpacing: 0,
-    marginBottom: 12,
     minHeight: 44,
     paddingHorizontal: 12,
   },
@@ -6325,9 +6335,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   shareSearchSortRow: {
-    alignItems: 'stretch',
+    alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 12,
   },
   shareSearchWrap: {
     flex: 1,
@@ -6336,15 +6347,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f5c76b',
     borderRadius: 8,
+    height: 44,
     justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: 10,
+    width: 44,
+  },
+  sortButtonActive: {
+    backgroundColor: '#e8b54a',
   },
   sortButtonText: {
     color: '#101820',
-    fontSize: 13,
+    fontSize: 22,
     fontWeight: '900',
     letterSpacing: 0,
+    lineHeight: 24,
   },
   sortMenu: {
     backgroundColor: '#ffffff',
