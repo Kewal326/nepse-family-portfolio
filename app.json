@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Portfolio",
-    "slug": "Portfolio",
+    "name": "NEPSE Family Portfolio",
+    "slug": "nepse-family-portfolio",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,7 +21,9 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize",
+      "package": "com.anonymous.nepsefamilyportfolio"
     },
     "web": {
       "favicon": "./assets/favicon.png"
