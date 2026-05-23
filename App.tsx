@@ -17,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import {
   WebView,
   type FileDownload,
@@ -3050,6 +3051,94 @@ function logLarge(label: string, payload: unknown) {
   }
 }
 
+function csvCell(value: string | number | null | undefined): string {
+  const str = String(value ?? '');
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+function buildHoldingsCSV(
+  holdings: Holding[],
+  purchaseLots: PurchaseLot[],
+  accountList: Account[],
+  includeAccount: boolean,
+): string {
+  const accountNameById = new Map(accountList.map((a) => [a.id, a.name]));
+  const headers = [
+    ...(includeAccount ? ['Account'] : []),
+    'Symbol',
+    'Company',
+    'Qty Held',
+    'Avg Cost (Rs.)',
+    'LTP (Rs.)',
+    'Invested (Rs.)',
+    'Current Value (Rs.)',
+    'P&L (Rs.)',
+    'P&L (%)',
+    'Purchase Source',
+    'Purchase Date',
+    'Lot Qty',
+    'Lot Rate (Rs.)',
+    'Lot Total Cost (Rs.)',
+  ];
+  const lines: string[] = [headers.join(',')];
+
+  for (const holding of holdings) {
+    const invested = holding.quantity * holding.averageCost;
+    const value = holding.quantity * holding.ltp;
+    const pnl = value - invested;
+    const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
+    const accountName = holding.accountId
+      ? (accountNameById.get(holding.accountId) || holding.accountId)
+      : '';
+
+    const holdingCols = [
+      ...(includeAccount ? [csvCell(accountName)] : []),
+      csvCell(holding.symbol),
+      csvCell(holding.company),
+      holding.quantity.toFixed(2),
+      holding.averageCost.toFixed(2),
+      holding.ltp.toFixed(2),
+      invested.toFixed(2),
+      value.toFixed(2),
+      pnl.toFixed(2),
+      pnlPct.toFixed(2) + '%',
+    ];
+
+    const lots = purchaseLots.filter(
+      (lot) => lot.symbol === holding.symbol && lot.accountId === holding.accountId,
+    );
+
+    if (lots.length === 0) {
+      lines.push([...holdingCols, '', '', '', '', ''].join(','));
+    } else {
+      for (const lot of lots) {
+        lines.push([
+          ...holdingCols,
+          csvCell(lot.purchaseSource),
+          csvCell(lot.transactionDate),
+          lot.quantity.toFixed(2),
+          lot.rate.toFixed(2),
+          lot.totalCost.toFixed(2),
+        ].join(','));
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
+async function shareHoldingsCSV(filename: string, csv: string): Promise<void> {
+  const uri = `${FileSystem.cacheDirectory || ''}${filename}`;
+  await FileSystem.writeAsStringAsync(uri, csv);
+  await Sharing.shareAsync(uri, {
+    mimeType: 'text/csv',
+    dialogTitle: 'Share portfolio data',
+  });
+}
+
 function isLoginUrl(url: string) {
   return url.includes('/login');
 }
@@ -3829,6 +3918,7 @@ export default function App() {
   const [priceSyncedAt, setPriceSyncedAt] = useState<string | null>(null);
   const [priceStatus, setPriceStatus] = useState('Latest prices will update after holdings load.');
   const [isPriceRefreshing, setIsPriceRefreshing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [downloadStatus, setDownloadStatus] = useState('Open MeroShare and tap its official report download.');
   const [networkRecords, setNetworkRecords] = useState<MeroShareNetworkLogPayload[]>([]);
   const [hasLoadedCachedPortfolio, setHasLoadedCachedPortfolio] = useState(false);
@@ -5316,6 +5406,53 @@ export default function App() {
     }
   }
 
+  async function handleExportCSV(holdingsToExport: Holding[], forAccountId?: string | null) {
+    if (isExporting) {
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      const lotsToExport = forAccountId
+        ? purchaseLotRecords.filter((lot) => lot.accountId === forAccountId)
+        : purchaseLotRecords;
+      const csv = buildHoldingsCSV(holdingsToExport, lotsToExport, accounts, !forAccountId);
+      const date = new Date().toISOString().slice(0, 10);
+      const safeName = forAccountId
+        ? (accounts.find((a) => a.id === forAccountId)?.name || forAccountId)
+          .replace(/\s+/g, '-')
+          .replace(/[^a-zA-Z0-9-]/g, '')
+          .slice(0, 30)
+        : 'All-Accounts';
+      await shareHoldingsCSV(`NEPSE-${safeName}-${date}.csv`, csv);
+    } catch {
+      // share sheet dismissed or failed silently
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  function renderExportCSVButton(onPress: () => void) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Export portfolio as CSV"
+        disabled={isExporting}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.priceRefreshButton,
+          pressed && !isExporting && styles.pressedButton,
+          isExporting && styles.disabledButton,
+        ]}
+      >
+        <Text style={styles.priceRefreshButtonText}>
+          {isExporting ? '…' : '⬆'}
+        </Text>
+      </Pressable>
+    );
+  }
+
   function renderPriceRefreshButton(symbols: string[]) {
     const isDisabled = isPriceRefreshing || symbols.length === 0;
 
@@ -5953,7 +6090,10 @@ export default function App() {
               <View>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Shares</Text>
-                  {renderPriceRefreshButton(portfolioSymbols)}
+                  <View style={styles.sectionHeaderActions}>
+                    {renderPriceRefreshButton(portfolioSymbols)}
+                    {renderExportCSVButton(() => handleExportCSV(accountHoldings, selectedAccountDetailId))}
+                  </View>
                 </View>
                 {renderShareListControls({
                   searchValue: accountSearchQuery,
@@ -6066,7 +6206,10 @@ export default function App() {
             <View>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Consolidated shares</Text>
-                {renderPriceRefreshButton(priceRefreshSymbols)}
+                <View style={styles.sectionHeaderActions}>
+                  {renderPriceRefreshButton(priceRefreshSymbols)}
+                  {renderExportCSVButton(() => handleExportCSV(portfolioHoldings))}
+                </View>
               </View>
               {renderShareListControls({
                 searchValue: consolidatedSearchQuery,
@@ -6317,6 +6460,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 24,
     marginBottom: 12,
+  },
+  sectionHeaderActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   shareSearchInput: {
     backgroundColor: '#ffffff',
