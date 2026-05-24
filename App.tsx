@@ -5,6 +5,7 @@ import {
   BackHandler,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   type NativeSyntheticEvent,
   Platform,
   Pressable,
@@ -3062,6 +3063,7 @@ function csvCell(value: string | number | null | undefined): string {
 function buildHoldingsCSV(
   holdings: Holding[],
   purchaseLots: PurchaseLot[],
+  costBasisRecords: CostBasis[],
   accountList: Account[],
   includeAccount: boolean,
 ): string {
@@ -3071,17 +3073,17 @@ function buildHoldingsCSV(
     'Symbol',
     'Company',
     'Qty Held',
-    'Avg Cost (Rs.)',
     'LTP (Rs.)',
     'Invested (Rs.)',
     'Current Value (Rs.)',
     'P&L (Rs.)',
     'P&L (%)',
-    'Purchase Source',
-    'Purchase Date',
-    'Lot Qty',
-    'Lot Rate (Rs.)',
-    'Lot Total Cost (Rs.)',
+    'Row Type',
+    'Source',
+    'Date',
+    'Qty',
+    'Rate (Rs.)',
+    'Total Cost (Rs.)',
   ];
   const lines: string[] = [headers.join(',')];
 
@@ -3094,12 +3096,11 @@ function buildHoldingsCSV(
       ? (accountNameById.get(holding.accountId) || holding.accountId)
       : '';
 
-    const holdingCols = [
+    const holdingContext = [
       ...(includeAccount ? [csvCell(accountName)] : []),
       csvCell(holding.symbol),
       csvCell(holding.company),
       holding.quantity.toFixed(2),
-      holding.averageCost.toFixed(2),
       holding.ltp.toFixed(2),
       invested.toFixed(2),
       value.toFixed(2),
@@ -3111,19 +3112,43 @@ function buildHoldingsCSV(
       (lot) => lot.symbol === holding.symbol && lot.accountId === holding.accountId,
     );
 
-    if (lots.length === 0) {
-      lines.push([...holdingCols, '', '', '', '', ''].join(','));
-    } else {
-      for (const lot of lots) {
-        lines.push([
-          ...holdingCols,
-          csvCell(lot.purchaseSource),
-          csvCell(lot.transactionDate),
-          lot.quantity.toFixed(2),
-          lot.rate.toFixed(2),
-          lot.totalCost.toFixed(2),
-        ].join(','));
-      }
+    const costBasis = costBasisRecords.find(
+      (r) => r.symbol === holding.symbol && r.accountId === holding.accountId,
+    );
+    const waccSummary = costBasis?.raw
+      ? (costBasis.raw as Record<string, unknown>).meroShareWaccSummary as Record<string, unknown> | undefined
+      : undefined;
+    const waccAvgRate = waccSummary ? numberFromUnknown(waccSummary.averageBuyRate) : 0;
+    const waccQty = waccSummary ? numberFromUnknown(waccSummary.totalQuantity) : 0;
+    const waccTotalCost = waccSummary ? numberFromUnknown(waccSummary.totalCost) : 0;
+    const hasWacc = waccAvgRate > 0 || waccQty > 0;
+
+    for (const lot of lots) {
+      lines.push([
+        ...holdingContext,
+        'PURCHASE_LOT',
+        csvCell(lot.purchaseSource),
+        csvCell(lot.transactionDate),
+        lot.quantity.toFixed(2),
+        lot.rate.toFixed(2),
+        lot.totalCost.toFixed(2),
+      ].join(','));
+    }
+
+    if (hasWacc) {
+      lines.push([
+        ...holdingContext,
+        'WACC_SUMMARY',
+        '',
+        '',
+        waccQty > 0 ? waccQty.toFixed(2) : '',
+        waccAvgRate > 0 ? waccAvgRate.toFixed(2) : '',
+        waccTotalCost > 0 ? waccTotalCost.toFixed(2) : '',
+      ].join(','));
+    }
+
+    if (lots.length === 0 && !hasWacc) {
+      lines.push([...holdingContext, 'NO_DATA', '', '', '', '', ''].join(','));
     }
   }
 
@@ -3137,6 +3162,52 @@ async function shareHoldingsCSV(filename: string, csv: string): Promise<void> {
     mimeType: 'text/csv',
     dialogTitle: 'Share portfolio data',
   });
+}
+
+function buildPLSummaryCSV(
+  holdings: Holding[],
+  accountList: Account[],
+  includeAccount: boolean,
+): string {
+  const accountNameById = new Map(accountList.map((a) => [a.id, a.name]));
+  const headers = [
+    ...(includeAccount ? ['Account'] : []),
+    'Symbol',
+    'Company',
+    'Qty',
+    'Avg Cost (Rs.)',
+    'LTP (Rs.)',
+    'Invested (Rs.)',
+    'Current Value (Rs.)',
+    'P&L (Rs.)',
+    'P&L (%)',
+  ];
+  const lines: string[] = [headers.join(',')];
+
+  for (const holding of holdings) {
+    const invested = holding.quantity * holding.averageCost;
+    const value = holding.quantity * holding.ltp;
+    const pnl = value - invested;
+    const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
+    const accountName = holding.accountId
+      ? (accountNameById.get(holding.accountId) || holding.accountId)
+      : '';
+
+    lines.push([
+      ...(includeAccount ? [csvCell(accountName)] : []),
+      csvCell(holding.symbol),
+      csvCell(holding.company),
+      holding.quantity.toFixed(2),
+      holding.averageCost.toFixed(2),
+      holding.ltp.toFixed(2),
+      invested.toFixed(2),
+      value.toFixed(2),
+      pnl.toFixed(2),
+      pnlPct.toFixed(2) + '%',
+    ].join(','));
+  }
+
+  return lines.join('\n');
 }
 
 function isLoginUrl(url: string) {
@@ -3902,6 +3973,10 @@ export default function App() {
   const directSyncModeRef = useRef<DirectSyncMode | null>(null);
   const latestPriceRefreshKeyRef = useRef('');
   const latestAnalysisExportSignatureRef = useRef('');
+  const exportButtonHomeRef = useRef<View>(null);
+  const exportButtonAccountRef = useRef<View>(null);
+  const exportOnCSVRef = useRef<(() => void) | null>(null);
+  const exportOnPLRef = useRef<(() => void) | null>(null);
   const [isSyncOpen, setIsSyncOpen] = useState(false);
   const [isWebViewLoading, setIsWebViewLoading] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -3930,6 +4005,8 @@ export default function App() {
   const [consolidatedSortOption, setConsolidatedSortOption] = useState<SortOption>('value');
   const [accountSortOption, setAccountSortOption] = useState<SortOption>('value');
   const [openSortScope, setOpenSortScope] = useState<'home' | 'account' | null>(null);
+  const [exportMenuVisible, setExportMenuVisible] = useState(false);
+  const [exportMenuTop, setExportMenuTop] = useState(0);
   const [apiProbeSummary, setApiProbeSummary] = useState<ApiProbeSummary>({
     status: 'idle',
     symbol: '',
@@ -5417,7 +5494,10 @@ export default function App() {
       const lotsToExport = forAccountId
         ? purchaseLotRecords.filter((lot) => lot.accountId === forAccountId)
         : purchaseLotRecords;
-      const csv = buildHoldingsCSV(holdingsToExport, lotsToExport, accounts, !forAccountId);
+      const costBasisToExport = forAccountId
+        ? costBasisRecords.filter((r) => r.accountId === forAccountId)
+        : costBasisRecords;
+      const csv = buildHoldingsCSV(holdingsToExport, lotsToExport, costBasisToExport, accounts, !forAccountId);
       const date = new Date().toISOString().slice(0, 10);
       const safeName = forAccountId
         ? (accounts.find((a) => a.id === forAccountId)?.name || forAccountId)
@@ -5433,23 +5513,102 @@ export default function App() {
     }
   }
 
-  function renderExportCSVButton(onPress: () => void) {
+  async function handleExportPL(holdingsToExport: Holding[], forAccountId?: string | null) {
+    if (isExporting) {
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      const csv = buildPLSummaryCSV(holdingsToExport, accounts, !forAccountId);
+      const date = new Date().toISOString().slice(0, 10);
+      const safeName = forAccountId
+        ? (accounts.find((a) => a.id === forAccountId)?.name || forAccountId)
+          .replace(/\s+/g, '-')
+          .replace(/[^a-zA-Z0-9-]/g, '')
+          .slice(0, 30)
+        : 'All-Accounts';
+      await shareHoldingsCSV(`NEPSE-PL-${safeName}-${date}.csv`, csv);
+    } catch {
+      // share sheet dismissed or failed silently
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  function renderExportButton(
+    scope: 'home' | 'account',
+    onCSV: () => void,
+    onPL: () => void,
+  ) {
+    const ref = scope === 'home' ? exportButtonHomeRef : exportButtonAccountRef;
+
     return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Export portfolio as CSV"
-        disabled={isExporting}
-        onPress={onPress}
-        style={({ pressed }) => [
-          styles.priceRefreshButton,
-          pressed && !isExporting && styles.pressedButton,
-          isExporting && styles.disabledButton,
-        ]}
+      <View ref={ref} collapsable={false}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Export portfolio data"
+          disabled={isExporting}
+          onPress={() => {
+            exportOnCSVRef.current = onCSV;
+            exportOnPLRef.current = onPL;
+            ref.current?.measure((_x, _y, _w, h, _px, py) => {
+              setExportMenuTop(py + h + 6);
+              setExportMenuVisible(true);
+            });
+          }}
+          style={({ pressed }) => [
+            styles.priceRefreshButton,
+            (exportMenuVisible || isExporting) && styles.pressedButton,
+            isExporting && styles.disabledButton,
+          ]}
+        >
+          <Text style={styles.priceRefreshButtonText}>
+            {isExporting ? '…' : '📤'}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  function renderExportModal() {
+    return (
+      <Modal
+        transparent
+        animationType="fade"
+        visible={exportMenuVisible}
+        onRequestClose={() => setExportMenuVisible(false)}
       >
-        <Text style={styles.priceRefreshButtonText}>
-          {isExporting ? '…' : '⬆'}
-        </Text>
-      </Pressable>
+        <View style={{ flex: 1 }}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setExportMenuVisible(false)}
+          />
+          <View style={[styles.exportMenuPopover, { top: exportMenuTop }]}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setExportMenuVisible(false);
+                exportOnCSVRef.current?.();
+              }}
+              style={({ pressed }) => [styles.sortMenuItem, pressed && styles.sortMenuItemActive]}
+            >
+              <Text style={styles.sortMenuItemText}>Sources & WACC data</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setExportMenuVisible(false);
+                exportOnPLRef.current?.();
+              }}
+              style={({ pressed }) => [styles.sortMenuItem, pressed && styles.sortMenuItemActive]}
+            >
+              <Text style={styles.sortMenuItemText}>P&L summary</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     );
   }
 
@@ -6045,18 +6204,29 @@ export default function App() {
           ListHeaderComponent={(
             <>
               <View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Back to demat accounts"
-                  hitSlop={12}
-                  onPress={() => setSelectedAccountDetailId(null)}
-                  style={({ pressed }) => [
-                    styles.detailBackButton,
-                    pressed && styles.pressedButton,
-                  ]}
-                >
-                  <Text style={styles.detailBackText}>←</Text>
-                </Pressable>
+                <View style={styles.detailTopRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Back to demat accounts"
+                    hitSlop={12}
+                    onPress={() => setSelectedAccountDetailId(null)}
+                    style={({ pressed }) => [
+                      styles.detailBackButton,
+                      pressed && styles.pressedButton,
+                    ]}
+                  >
+                    <Text style={styles.detailBackText}>←</Text>
+                  </Pressable>
+                  <View style={styles.sectionHeaderActions}>
+                    {renderPriceRefreshButton(portfolioSymbols)}
+                    {renderExportButton(
+                      'account',
+                      () => handleExportCSV(accountHoldings, selectedAccountDetailId),
+                      () => handleExportPL(accountHoldings, selectedAccountDetailId),
+                    )}
+                  </View>
+                </View>
+                {renderExportModal()}
 
                 <View style={styles.detailHero}>
                   <Text style={styles.detailSymbol}>{selectedAccountDetail.name}</Text>
@@ -6090,10 +6260,6 @@ export default function App() {
               <View>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Shares</Text>
-                  <View style={styles.sectionHeaderActions}>
-                    {renderPriceRefreshButton(portfolioSymbols)}
-                    {renderExportCSVButton(() => handleExportCSV(accountHoldings, selectedAccountDetailId))}
-                  </View>
                 </View>
                 {renderShareListControls({
                   searchValue: accountSearchQuery,
@@ -6152,7 +6318,16 @@ export default function App() {
                   <Text style={styles.eyebrow}>Family Portfolio</Text>
                   <Text style={styles.title}>NEPSE holdings</Text>
                 </View>
+                <View style={styles.sectionHeaderActions}>
+                  {renderPriceRefreshButton(priceRefreshSymbols)}
+                  {renderExportButton(
+                    'home',
+                    () => handleExportCSV(portfolioHoldings),
+                    () => handleExportPL(portfolioHoldings),
+                  )}
+                </View>
               </View>
+              {renderExportModal()}
 
               {renderPortfolioSummaryPanel({
                 currentValue: totals.value,
@@ -6206,10 +6381,6 @@ export default function App() {
             <View>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Consolidated shares</Text>
-                <View style={styles.sectionHeaderActions}>
-                  {renderPriceRefreshButton(priceRefreshSymbols)}
-                  {renderExportCSVButton(() => handleExportCSV(portfolioHoldings))}
-                </View>
               </View>
               {renderShareListControls({
                 searchValue: consolidatedSearchQuery,
@@ -6251,17 +6422,17 @@ const styles = StyleSheet.create({
   searchScreenContent: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: (RNStatusBar.currentHeight || 0) + 12,
+    paddingTop: (RNStatusBar.currentHeight || 24) + 20,
     paddingBottom: 24,
   },
   content: {
     paddingHorizontal: 20,
-    paddingTop: (RNStatusBar.currentHeight || 0) + 18,
+    paddingTop: (RNStatusBar.currentHeight || 24) + 28,
     paddingBottom: 36,
   },
   detailContent: {
     paddingHorizontal: 20,
-    paddingTop: (RNStatusBar.currentHeight || 0) + 12,
+    paddingTop: (RNStatusBar.currentHeight || 24) + 20,
     paddingBottom: 36,
   },
   header: {
@@ -6465,6 +6636,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 4,
+  },
+  detailTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  exportMenuPopover: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d0d5dd',
+    borderRadius: 8,
+    borderWidth: 1,
+    elevation: 10,
+    minWidth: 200,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
   },
   shareSearchInput: {
     backgroundColor: '#ffffff',
