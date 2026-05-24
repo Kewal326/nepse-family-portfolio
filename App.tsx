@@ -38,6 +38,12 @@ type Holding = {
 
 type SortOption = 'profit-value' | 'profit-pct' | 'loss-value' | 'loss-pct' | 'invested' | 'value';
 
+type NepseIndexData = {
+  currentValue: number;
+  pointChange: number;
+  percentChange: number;
+};
+
 type PriceQuote = {
   symbol: string;
   ltp: number;
@@ -3487,6 +3493,28 @@ function nepseRequestId(proof: Record<string, unknown>, marketStatus: Record<str
   return dummySeed + (accessTokens[tokenIndex] * day) - accessTokens[tokenIndex - 1];
 }
 
+function parseNepseIndex(payload: unknown): NepseIndexData | null {
+  if (!Array.isArray(payload) || !payload.length) {
+    return null;
+  }
+
+  // Find the NEPSE composite index entry (e.g. "NEPSE Index")
+  const entry = payload.find((item) =>
+    String(asRecord(item).index || '').toUpperCase().includes('NEPSE'),
+  ) ?? payload[0];
+
+  const r = asRecord(entry);
+  const currentValue = numberFromUnknown(r.currentValue);
+  const pointChange = numberFromUnknown(r.change);
+  const percentChange = numberFromUnknown(r.perChange);
+
+  if (!currentValue) {
+    return null;
+  }
+
+  return { currentValue, pointChange, percentChange };
+}
+
 function businessDateFromMarketStatus(marketStatus: Record<string, unknown>) {
   const asOf = String(marketStatus.asOf || '').split('T')[0];
   if (asOf) {
@@ -3560,9 +3588,24 @@ async function fetchOfficialNepseTodayPrices(symbols: string[]) {
     throw new Error('/today-price: no matching symbols');
   }
 
+  let nepseIndexData: NepseIndexData | null = null;
+  try {
+    const indexResponse = await fetchWithTimeout(
+      `${NEPSE_OFFICIAL_API_BASE_URL}/nots/nepse-index`,
+      10000,
+      authHeaders,
+    );
+    if (indexResponse.ok) {
+      nepseIndexData = parseNepseIndex(await indexResponse.json());
+    }
+  } catch (e) {
+    // Index fetch is best-effort — price data still returned
+  }
+
   return {
     endpoint: `NEPSE today-price ${businessDate}`,
     quotes: quoteMap,
+    nepseIndexData,
   };
 }
 
@@ -3593,6 +3636,7 @@ async function fetchUnofficialNepsePrices(symbols: string[]) {
         return {
           endpoint,
           quotes: quoteMap,
+          nepseIndexData: null,
         };
       }
 
@@ -4007,6 +4051,7 @@ export default function App() {
   const [openSortScope, setOpenSortScope] = useState<'home' | 'account' | null>(null);
   const [exportMenuVisible, setExportMenuVisible] = useState(false);
   const [exportMenuTop, setExportMenuTop] = useState(0);
+  const [nepseIndexData, setNepseIndexData] = useState<NepseIndexData | null>(null);
   const [apiProbeSummary, setApiProbeSummary] = useState<ApiProbeSummary>({
     status: 'idle',
     symbol: '',
@@ -5457,11 +5502,14 @@ export default function App() {
     setPriceStatus('Updating latest NEPSE prices...');
 
     try {
-      const { endpoint, quotes } = await fetchLatestNepsePrices(uniqueSymbols);
+      const { endpoint, quotes, nepseIndexData: indexData } = await fetchLatestNepsePrices(uniqueSymbols);
       const updatedAt = new Date().toISOString();
       const missingSymbols = uniqueSymbols.filter((symbol) => !quotes.has(symbol));
       setSyncedHoldings((current) => mergeLatestPricesIntoHoldings(current, quotes, updatedAt));
       setPriceSyncedAt(updatedAt);
+      if (indexData) {
+        setNepseIndexData(indexData);
+      }
       if (missingSymbols.length) {
         logLarge('NEPSE latest price missing symbols', {
           endpoint,
@@ -5740,6 +5788,7 @@ export default function App() {
     totalHoldings,
     totalShares,
     statusText,
+    accountCount,
   }: {
     currentValue: number;
     totalInvested: number;
@@ -5748,18 +5797,20 @@ export default function App() {
     totalHoldings: number;
     totalShares: number;
     statusText?: string;
+    accountCount?: number;
   }) {
     const summaryIsProfit = totalProfitLoss >= 0;
+    const labelText = accountCount
+      ? `Current value · ${accountCount} ${accountCount === 1 ? 'account' : 'accounts'}`
+      : 'Current value';
 
     return (
       <View style={styles.summaryPanel}>
+        <Text style={styles.panelLabel}>{labelText}</Text>
         <View style={styles.summaryTopRow}>
-          <View style={styles.summaryValueGroup}>
-            <Text style={styles.panelLabel}>Current value</Text>
-            <Text adjustsFontSizeToFit numberOfLines={1} style={styles.valueText}>
-              {formatMoney(currentValue)}
-            </Text>
-          </View>
+          <Text adjustsFontSizeToFit numberOfLines={1} style={styles.valueText}>
+            {formatMoney(currentValue)}
+          </Text>
           <View style={[styles.pnlPill, summaryIsProfit ? styles.profitPill : styles.lossPill]}>
             <Text style={[styles.pnlText, summaryIsProfit ? styles.profitText : styles.lossText]}>
               {summaryIsProfit ? '+' : ''}
@@ -6314,9 +6365,8 @@ export default function App() {
           <>
             <View>
               <View style={styles.header}>
-                <View>
-                  <Text style={styles.eyebrow}>Family Portfolio</Text>
-                  <Text style={styles.title}>NEPSE holdings</Text>
+                <View style={styles.headerTitleBlock}>
+                  <Text style={styles.title}>Lagani</Text>
                 </View>
                 <View style={styles.sectionHeaderActions}>
                   {renderPriceRefreshButton(priceRefreshSymbols)}
@@ -6329,6 +6379,29 @@ export default function App() {
               </View>
               {renderExportModal()}
 
+              <View style={styles.nepseIndexStrip}>
+                <Text style={styles.nepseIndexLabel}>NEPSE Index</Text>
+                {nepseIndexData ? (
+                  <View style={styles.nepseIndexRow}>
+                    <Text style={styles.nepseIndexValue}>
+                      {formatDecimal(nepseIndexData.currentValue)}
+                    </Text>
+                    <Text style={[
+                      styles.nepseIndexChange,
+                      nepseIndexData.pointChange >= 0 ? styles.profitText : styles.lossText,
+                    ]}>
+                      {nepseIndexData.pointChange >= 0 ? '▲' : '▼'}{' '}
+                      {formatDecimal(Math.abs(nepseIndexData.pointChange))}
+                      {'  '}({Math.abs(nepseIndexData.percentChange).toFixed(2)}%)
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.nepseIndexUnavailable}>
+                    {isPriceRefreshing ? 'Fetching…' : 'Tap ↻ to load'}
+                  </Text>
+                )}
+              </View>
+
               {renderPortfolioSummaryPanel({
                 currentValue: totals.value,
                 totalInvested: totals.cost,
@@ -6336,6 +6409,7 @@ export default function App() {
                 totalProfitLossPercent: profitLossPercent,
                 totalHoldings: consolidatedHoldings.length,
                 totalShares: totalQuantity,
+                accountCount: accounts.length,
                 statusText: priceSyncedAt && !priceStatus.includes('unavailable')
                   ? `${priceStatus} at ${new Date(priceSyncedAt).toLocaleTimeString()}`
                   : priceStatus,
@@ -6439,15 +6513,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 18,
+    marginBottom: 12,
   },
-  eyebrow: {
-    color: '#8fd5bf',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0,
-    marginBottom: 4,
-    textTransform: 'uppercase',
+  headerTitleBlock: {
+    flex: 1,
+    justifyContent: 'center',
   },
   title: {
     color: '#ffffff',
@@ -6475,14 +6545,11 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   summaryTopRow: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
-  },
-  summaryValueGroup: {
-    flex: 1,
-    minWidth: 0,
+    marginTop: 4,
   },
   panelLabel: {
     color: '#5b6370',
@@ -6494,10 +6561,12 @@ const styles = StyleSheet.create({
   },
   valueText: {
     color: '#111827',
+    flex: 1,
     flexShrink: 1,
     fontSize: 28,
     fontWeight: '800',
     letterSpacing: 0,
+    minWidth: 0,
   },
   pnlPill: {
     borderRadius: 18,
@@ -6642,6 +6711,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 4,
+  },
+  nepseIndexStrip: {
+    backgroundColor: '#1a2530',
+    borderRadius: 8,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  nepseIndexLabel: {
+    color: '#8fd5bf',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+  },
+  nepseIndexRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  nepseIndexValue: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  nepseIndexChange: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0,
+  },
+  nepseIndexUnavailable: {
+    color: '#5b6370',
+    fontSize: 13,
+    fontWeight: '500',
   },
   exportMenuPopover: {
     backgroundColor: '#ffffff',
