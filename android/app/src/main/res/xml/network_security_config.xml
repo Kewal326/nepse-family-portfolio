@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!-- Allow cleartext (HTTP) for Metro bundler and local dev servers -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
     <!-- Bundle GeoTrust TLS RSA CA G1 intermediate cert — nepalstock.com server omits it,
          causing chain validation failure in release builds. Chrome auto-fetches it; WebView doesn't. -->
     <domain-config>

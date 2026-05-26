@@ -32,11 +32,12 @@ type Holding = {
   quantity: number;
   averageCost: number;
   ltp: number;
+  dayChangePercent?: number;
   source: string;
   raw?: unknown;
 };
 
-type SortOption = 'profit-value' | 'profit-pct' | 'loss-value' | 'loss-pct' | 'invested' | 'value';
+type SortOption = 'alphabetical' | 'profit-value' | 'profit-pct' | 'loss-value' | 'loss-pct' | 'invested' | 'value';
 
 type NepseIndexData = {
   currentValue: number;
@@ -47,6 +48,7 @@ type NepseIndexData = {
 type PriceQuote = {
   symbol: string;
   ltp: number;
+  dayChangePercent?: number;
   raw?: unknown;
 };
 
@@ -2294,6 +2296,8 @@ function holdingSortValue(holding: Holding, sortOption: SortOption) {
   const profitLossPct = invested > 0 ? profitLoss / invested : 0;
 
   switch (sortOption) {
+    case 'alphabetical':
+      return 0; // tiebreaker in sortHoldings handles a-z
     case 'profit-value':
       return profitLoss;
     case 'profit-pct':
@@ -2312,6 +2316,9 @@ function holdingSortValue(holding: Holding, sortOption: SortOption) {
 }
 
 function sortHoldings(holdings: Holding[], sortOption: SortOption) {
+  if (sortOption === 'alphabetical') {
+    return [...holdings].sort((a, b) => a.symbol.localeCompare(b.symbol));
+  }
   return [...holdings].sort((a, b) => {
     const sortDiff = holdingSortValue(b, sortOption) - holdingSortValue(a, sortOption);
     return sortDiff || a.symbol.localeCompare(b.symbol);
@@ -3345,9 +3352,15 @@ function marketRecordToQuote(record: Record<string, unknown>, fallbackSymbol = '
     return null;
   }
 
+  const previousClose = numberFromUnknown(
+    marketValueForAliases(record, ['previousDayClosePrice', 'previousClose', 'previousClosingPrice']),
+  );
+  const dayChangePercent = previousClose > 0 ? ((ltp - previousClose) / previousClose) * 100 : undefined;
+
   return {
     symbol,
     ltp,
+    dayChangePercent,
     raw: sanitizeForLog(record),
   };
 }
@@ -3381,14 +3394,20 @@ function collectMarketQuotes(value: unknown, fallbackSymbol = '', depth = 0): Pr
 function mergeLatestPricesIntoHoldings(holdings: Holding[], prices: Map<string, PriceQuote>, updatedAt: string) {
   return holdings.map((holding) => {
     const quote = prices.get(holding.symbol);
-    if (!quote || quote.ltp <= 0 || quote.ltp === holding.ltp) {
+    if (!quote || quote.ltp <= 0) {
       return holding;
+    }
+    if (quote.ltp === holding.ltp) {
+      return quote.dayChangePercent !== undefined
+        ? { ...holding, dayChangePercent: quote.dayChangePercent }
+        : holding;
     }
 
     const rawRecord = asRecord(holding.raw);
     return {
       ...holding,
       ltp: quote.ltp,
+      dayChangePercent: quote.dayChangePercent,
       source: holding.source.includes('NEPSE latest price')
         ? holding.source
         : `${holding.source} + NEPSE latest price`,
@@ -3571,6 +3590,7 @@ function createNepseFetchScript(symbols: string[]): string {
 
   var SYMBOL_KEYS = ['symbol','scrip','scripSymbol','stockSymbol','securitySymbol','companySymbol'];
   var PRICE_KEYS = ['ltp','lastUpdatedPrice','lastTradedPrice','lastTradePrice','lastTransactionPrice','lastPrice','closingPrice','closePrice','averageTradedPrice','previousClose','previousClosingPrice'];
+  var PREV_CLOSE_KEYS = ['previousDayClosePrice','previousClose','previousClosingPrice'];
 
   function extractQuotes(payload, wanted, out, depth) {
     if (depth>8) return;
@@ -3579,7 +3599,14 @@ function createNepseFetchScript(symbols: string[]): string {
     var keys=Object.keys(payload); if(!keys.length) return;
     var sym=''; for(var i=0;i<SYMBOL_KEYS.length;i++){if(payload[SYMBOL_KEYS[i]]){sym=String(payload[SYMBOL_KEYS[i]]).trim().toUpperCase();break;}}
     var price=0; for(var j=0;j<PRICE_KEYS.length;j++){var v=Number(payload[PRICE_KEYS[j]]);if(v>0){price=v;break;}}
-    if(sym&&price>0&&wanted.indexOf(sym)>=0){if(!out[sym])out[sym]=price;return;}
+    if(sym&&price>0&&wanted.indexOf(sym)>=0){
+      if(!out[sym]){
+        var prevClose=0; for(var k=0;k<PREV_CLOSE_KEYS.length;k++){var pv=Number(payload[PREV_CLOSE_KEYS[k]]);if(pv>0){prevClose=pv;break;}}
+        var chg = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : null;
+        out[sym]={ltp:price,dayChangePercent:chg};
+      }
+      return;
+    }
     keys.forEach(function(k){extractQuotes(payload[k],wanted,out,depth+1);});
   }
 
@@ -4160,8 +4187,8 @@ export default function App() {
   const [consolidatedSearchQuery, setConsolidatedSearchQuery] = useState('');
   const [accountSearchQuery, setAccountSearchQuery] = useState('');
   const [activeSearchScope, setActiveSearchScope] = useState<'home' | 'account' | null>(null);
-  const [consolidatedSortOption, setConsolidatedSortOption] = useState<SortOption>('value');
-  const [accountSortOption, setAccountSortOption] = useState<SortOption>('value');
+  const [consolidatedSortOption, setConsolidatedSortOption] = useState<SortOption>('alphabetical');
+  const [accountSortOption, setAccountSortOption] = useState<SortOption>('alphabetical');
   const [openSortScope, setOpenSortScope] = useState<'home' | 'account' | null>(null);
   const [exportMenuVisible, setExportMenuVisible] = useState(false);
   const [exportMenuTop, setExportMenuTop] = useState(0);
@@ -5570,10 +5597,12 @@ export default function App() {
 
       if (payload.type === 'nepse_price_result') {
         const quoteMap = new Map<string, PriceQuote>();
-        const rawQuotes = payload.quotes as Record<string, number>;
-        Object.entries(rawQuotes).forEach(([symbol, ltp]) => {
-          if (symbol && Number(ltp) > 0) {
-            quoteMap.set(symbol, { symbol, ltp: Number(ltp), raw: {} });
+        const rawQuotes = payload.quotes as Record<string, { ltp: number; dayChangePercent: number | null }>;
+        Object.entries(rawQuotes).forEach(([symbol, entry]) => {
+          const ltp = Number(entry?.ltp ?? entry);
+          if (symbol && ltp > 0) {
+            const dayChangePercent = entry?.dayChangePercent != null ? Number(entry.dayChangePercent) : undefined;
+            quoteMap.set(symbol, { symbol, ltp, dayChangePercent, raw: {} });
           }
         });
         nepseWebViewPromiseRef.current.resolve({
@@ -5622,7 +5651,18 @@ export default function App() {
 
         <View style={styles.holdingRowBottom}>
           <Text style={styles.holdingMetaText}>Invested {formatMoney(cost).replace('Rs. ', '')}</Text>
-          <Text style={styles.holdingMetaText}>LTP {formatDecimal(holding.ltp)}</Text>
+          <Text style={styles.holdingMetaText}>
+            {'LTP '}
+            {formatDecimal(holding.ltp)}
+            {holding.dayChangePercent != null ? (
+              <Text style={holding.dayChangePercent >= 0 ? styles.profitText : styles.lossText}>
+                {' ('}
+                {holding.dayChangePercent >= 0 ? '+' : ''}
+                {formatDecimal(holding.dayChangePercent)}
+                {'%)'}
+              </Text>
+            ) : null}
+          </Text>
         </View>
       </Pressable>
     );
@@ -5864,6 +5904,8 @@ export default function App() {
 
   function sortOptionLabel(sortOption: SortOption) {
     switch (sortOption) {
+      case 'alphabetical':
+        return 'A–Z';
       case 'profit-value':
         return 'Profit Rs.';
       case 'profit-pct':
@@ -5877,7 +5919,7 @@ export default function App() {
       case 'value':
         return 'Value';
       default:
-        return 'Value';
+        return 'A–Z';
     }
   }
 
@@ -5896,6 +5938,7 @@ export default function App() {
   }) {
     const isSortOpen = openSortScope === scope;
     const sortOptions: Array<{ value: SortOption; label: string }> = [
+      { value: 'alphabetical', label: 'Sort A–Z' },
       { value: 'profit-value', label: 'Sort by profit (Rs.)' },
       { value: 'profit-pct', label: 'Sort by profit (%)' },
       { value: 'loss-value', label: 'Sort by loss (Rs.)' },
@@ -5914,7 +5957,7 @@ export default function App() {
             accessibilityRole="button"
             accessibilityLabel={`Sort: ${sortOptionLabel(sortOption)}`}
             onPress={() => setOpenSortScope(isSortOpen ? null : scope)}
-            style={[styles.sortButton, sortOption !== 'value' && styles.sortButtonActive]}
+            style={[styles.sortButton, sortOption !== 'alphabetical' && styles.sortButtonActive]}
           >
             <Text style={styles.sortButtonText}>⇅</Text>
           </Pressable>
