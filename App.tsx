@@ -3524,6 +3524,113 @@ function businessDateFromMarketStatus(marketStatus: Record<string, unknown>) {
   return new Date().toISOString().split('T')[0];
 }
 
+// Generates a self-contained JS script to run inside a WebView loaded at https://www.nepalstock.com/
+// Uses same-origin relative URLs so the WAF TLS-fingerprint check is bypassed (WebView = real Chrome).
+function createNepseFetchScript(symbols: string[]): string {
+  const symbolsJson = JSON.stringify(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean));
+  const stripTableJson = JSON.stringify(NEPSE_TOKEN_STRIP_TABLE);
+  const dummyDataJson = JSON.stringify(NEPSE_DUMMY_DATA);
+
+  return `
+(async function() {
+  var STRIP_TABLE = ${stripTableJson};
+  var DUMMY_DATA = ${dummyDataJson};
+  var symbols = ${symbolsJson};
+
+  function digitParts(value) {
+    var n = Math.trunc(Math.abs(Number(value) || 0));
+    var hundreds = Math.trunc(n / 100) % 10;
+    var tens = Math.trunc(n / 10) % 10;
+    var ones = n % 10;
+    return { hundreds: hundreds, tens: tens, sum: hundreds + tens + ones };
+  }
+
+  function stripToken(token, salt) {
+    var d = digitParts(salt);
+    var tv = STRIP_TABLE[d.sum] || 0;
+    var idxs = [tv+22, d.hundreds+d.tens+tv+32, d.hundreds+d.tens+tv+60, d.tens+tv+88, d.hundreds+tv+110];
+    idxs.sort(function(a,b){return a-b;});
+    return idxs.reduceRight(function(t,i){
+      return (i>=0 && i<t.length) ? t.slice(0,i)+t.slice(i+1) : t;
+    }, String(token||''));
+  }
+
+  function calcRequestId(proof, market) {
+    var day = new Date().getDate();
+    var marketId = Math.trunc(Number(market.id)||0);
+    var seed = (DUMMY_DATA[marketId]||0) + marketId + (2*day);
+    var salts = [Number(proof.salt1)||0, Number(proof.salt2)||0, Number(proof.salt3)||0, Number(proof.salt4)||0, Number(proof.salt5)||0];
+    var ti = seed%10 < 5 ? 1 : 3;
+    return seed + (salts[ti]*day) - salts[ti-1];
+  }
+
+  function bizDate(market) {
+    var d = String(market.asOf||'').split('T')[0];
+    return d || new Date().toISOString().split('T')[0];
+  }
+
+  var SYMBOL_KEYS = ['symbol','scrip','scripSymbol','stockSymbol','securitySymbol','companySymbol'];
+  var PRICE_KEYS = ['ltp','lastUpdatedPrice','lastTradedPrice','lastTradePrice','lastTransactionPrice','lastPrice','closingPrice','closePrice','averageTradedPrice','previousClose','previousClosingPrice'];
+
+  function extractQuotes(payload, wanted, out, depth) {
+    if (depth>8) return;
+    if (Array.isArray(payload)) { payload.forEach(function(x){extractQuotes(x,wanted,out,depth+1);}); return; }
+    if (!payload||typeof payload!=='object') return;
+    var keys=Object.keys(payload); if(!keys.length) return;
+    var sym=''; for(var i=0;i<SYMBOL_KEYS.length;i++){if(payload[SYMBOL_KEYS[i]]){sym=String(payload[SYMBOL_KEYS[i]]).trim().toUpperCase();break;}}
+    var price=0; for(var j=0;j<PRICE_KEYS.length;j++){var v=Number(payload[PRICE_KEYS[j]]);if(v>0){price=v;break;}}
+    if(sym&&price>0&&wanted.indexOf(sym)>=0){if(!out[sym])out[sym]=price;return;}
+    keys.forEach(function(k){extractQuotes(payload[k],wanted,out,depth+1);});
+  }
+
+  try {
+    var hdrs = {'accept':'application/json, text/plain, */*'};
+    var pr = await fetch('/api/authenticate/prove',{headers:hdrs});
+    if(!pr.ok) throw new Error('/prove HTTP '+pr.status);
+    var proof = await pr.json();
+    var token = proof.accessToken ? stripToken(proof.accessToken, proof.salt2) : '';
+    if(!token) throw new Error('/prove: no accessToken');
+
+    var ah = Object.assign({},hdrs,{'Authorization':'Salter '+token});
+
+    var mr = await fetch('/api/nots/nepse-data/market-open',{headers:ah});
+    if(!mr.ok) throw new Error('/market-open HTTP '+mr.status);
+    var market = await mr.json();
+
+    var reqId = calcRequestId(proof, market);
+    var bd = bizDate(market);
+    var quotes = {};
+    var totalPages = 1;
+
+    for(var page=0; page<totalPages&&page<20; page++){
+      var url='/api/nots/nepse-data/today-price?page='+page+'&size=500&businessDate='+bd;
+      var resp = await fetch(url,{method:'POST',headers:Object.assign({},ah,{'Content-Type':'application/json'}),body:JSON.stringify({id:reqId})});
+      if(!resp.ok) throw new Error('/today-price HTTP '+resp.status);
+      var pl = await resp.json();
+      totalPages = Math.max(1,Math.min(Number(pl.totalPages)||1,20));
+      extractQuotes(pl, symbols, quotes, 0);
+      if(Object.keys(quotes).length>=symbols.length||pl.last===true) break;
+    }
+
+    var indexData = null;
+    try {
+      var ir = await fetch('/api/nots/nepse-index',{headers:ah});
+      if(ir.ok){
+        var ip = await ir.json();
+        var ia = Array.isArray(ip)?ip:[];
+        var ie = ia.find(function(x){return String(x.index||'').toUpperCase().includes('NEPSE');})||ia[0];
+        if(ie) indexData={currentValue:Number(ie.currentValue)||0,pointChange:Number(ie.change)||0,percentChange:Number(ie.perChange)||0};
+      }
+    } catch(e){}
+
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'nepse_price_result',quotes:quotes,businessDate:bd,nepseIndexData:indexData}));
+  } catch(e) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'nepse_price_error',error:String(e&&e.message?e.message:e)}));
+  }
+})(); true;
+`;
+}
+
 async function fetchOfficialNepseTodayPrices(symbols: string[]) {
   const wantedSymbols = new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean));
   const websiteHeaders = {
@@ -4012,6 +4119,12 @@ function portfolioApiRowsToHoldings(rows: unknown[]): Holding[] {
 
 export default function App() {
   const webViewRef = useRef<WebView>(null);
+  const nepseWebViewRef = useRef<WebView>(null);
+  const nepseWebViewPromiseRef = useRef<{
+    resolve: (result: { endpoint: string; quotes: Map<string, PriceQuote>; nepseIndexData: NepseIndexData | null }) => void;
+    reject: (error: Error) => void;
+  } | null>(null);
+  const nepseWebViewSymbolsRef = useRef<string[]>([]);
   const isApiProbingRef = useRef(false);
   const autoSyncStartedRef = useRef(false);
   const directSyncModeRef = useRef<DirectSyncMode | null>(null);
@@ -4022,6 +4135,7 @@ export default function App() {
   const exportOnCSVRef = useRef<(() => void) | null>(null);
   const exportOnPLRef = useRef<(() => void) | null>(null);
   const [isSyncOpen, setIsSyncOpen] = useState(false);
+  const [isPriceFetchWebViewOpen, setIsPriceFetchWebViewOpen] = useState(false);
   const [isWebViewLoading, setIsWebViewLoading] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [currentUrl, setCurrentUrl] = useState(MEROSHARE_URL);
@@ -5447,6 +5561,34 @@ export default function App() {
     }
   }
 
+  function handleNepseWebViewMessage(event: WebViewMessageEvent) {
+    try {
+      const payload = JSON.parse(event.nativeEvent.data);
+      if (!nepseWebViewPromiseRef.current) {
+        return;
+      }
+
+      if (payload.type === 'nepse_price_result') {
+        const quoteMap = new Map<string, PriceQuote>();
+        const rawQuotes = payload.quotes as Record<string, number>;
+        Object.entries(rawQuotes).forEach(([symbol, ltp]) => {
+          if (symbol && Number(ltp) > 0) {
+            quoteMap.set(symbol, { symbol, ltp: Number(ltp), raw: {} });
+          }
+        });
+        nepseWebViewPromiseRef.current.resolve({
+          endpoint: `NEPSE today-price ${payload.businessDate || ''} (WebView)`,
+          quotes: quoteMap,
+          nepseIndexData: payload.nepseIndexData || null,
+        });
+      } else if (payload.type === 'nepse_price_error') {
+        nepseWebViewPromiseRef.current.reject(new Error(payload.error || 'NEPSE WebView fetch failed'));
+      }
+    } catch (_) {
+      // ignore non-NEPSE messages from the background WebView
+    }
+  }
+
   function renderHoldingCard(holding: Holding, onPress?: () => void) {
     const cost = holding.quantity * holding.averageCost;
     const value = holding.quantity * holding.ltp;
@@ -5502,7 +5644,29 @@ export default function App() {
     setPriceStatus('Updating latest NEPSE prices...');
 
     try {
-      const { endpoint, quotes, nepseIndexData: indexData } = await fetchLatestNepsePrices(uniqueSymbols);
+      // Show the WebView overlay — it loads nepalstock.com with real Chrome TLS,
+      // bypassing the WAF fingerprint check that blocks native fetch.
+      const { endpoint, quotes, nepseIndexData: indexData } = await new Promise<{
+        endpoint: string;
+        quotes: Map<string, PriceQuote>;
+        nepseIndexData: NepseIndexData | null;
+      }>((resolve, reject) => {
+        if (nepseWebViewPromiseRef.current) {
+          nepseWebViewPromiseRef.current.reject(new Error('Superseded by new price refresh'));
+        }
+        const timer = setTimeout(() => {
+          nepseWebViewPromiseRef.current = null;
+          setIsPriceFetchWebViewOpen(false);
+          reject(new Error('NEPSE price fetch timed out'));
+        }, 35000);
+        nepseWebViewPromiseRef.current = {
+          resolve: (r) => { clearTimeout(timer); nepseWebViewPromiseRef.current = null; resolve(r); },
+          reject: (e) => { clearTimeout(timer); nepseWebViewPromiseRef.current = null; reject(e); },
+        };
+        nepseWebViewSymbolsRef.current = uniqueSymbols;
+        setIsPriceFetchWebViewOpen(true);
+      });
+
       const updatedAt = new Date().toISOString();
       const missingSymbols = uniqueSymbols.filter((symbol) => !quotes.has(symbol));
       setSyncedHoldings((current) => mergeLatestPricesIntoHoldings(current, quotes, updatedAt));
@@ -5524,10 +5688,11 @@ export default function App() {
           : `Updated ${quotes.size}/${uniqueSymbols.length} prices from ${endpoint}`,
       );
     } catch (error) {
-      console.log('[MeroShare Sync] NEPSE latest price update failed', error);
+      console.log('[NEPSE price fetch] Failed', error);
       setPriceStatus('Latest price fetch unavailable; using cached MeroShare prices.');
     } finally {
       setIsPriceRefreshing(false);
+      setIsPriceFetchWebViewOpen(false);
     }
   }
 
@@ -5918,6 +6083,36 @@ export default function App() {
             })}
             showsVerticalScrollIndicator={false}
           />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isPriceFetchWebViewOpen) {
+    return (
+      <SafeAreaView style={styles.syncScreen}>
+        <StatusBar style="light" />
+        <View style={styles.webViewWrap}>
+          {/* FlipkartRootCA (NEPSE's private CA) is trusted via network_security_config.xml */}
+          <WebView
+            ref={nepseWebViewRef}
+            source={{ uri: 'https://www.nepalstock.com/' }}
+            javaScriptEnabled
+            domStorageEnabled
+            sharedCookiesEnabled
+            thirdPartyCookiesEnabled
+            onLoadEnd={() => {
+              nepseWebViewRef.current?.injectJavaScript(
+                createNepseFetchScript(nepseWebViewSymbolsRef.current),
+              );
+            }}
+            onMessage={handleNepseWebViewMessage}
+          />
+          <View style={styles.syncLoaderOverlay}>
+            <ActivityIndicator color="#8fd5bf" size="large" />
+            <Text style={styles.syncLoaderTitle}>Fetching live prices…</Text>
+            <Text style={styles.syncLoaderText}>Loading NEPSE data</Text>
+          </View>
         </View>
       </SafeAreaView>
     );
