@@ -6604,7 +6604,7 @@ export default function App() {
             <View>
               <View style={styles.header}>
                 <View style={styles.headerTitleBlock}>
-                  <Text style={styles.title}>Lagani</Text>
+                  <Text style={styles.title}>Artha</Text>
                 </View>
                 <View style={styles.sectionHeaderActions}>
                   {renderPriceRefreshButton(priceRefreshSymbols)}

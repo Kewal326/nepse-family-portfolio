@@ -1,4 +1,4 @@
-package com.nepseportfolio.app
+package com.artha.app
 
 import android.os.Build
 import android.os.Bundle
