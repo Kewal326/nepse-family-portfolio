@@ -34,8 +34,7 @@
   <h2>1. Data We Collect</h2>
   <p>Artha collects only the data necessary to display your portfolio. All data is stored locally on your device — nothing is sent to our servers because we do not operate any servers.</p>
   <ul>
-    <li><strong>MeroShare credentials</strong> — your DP ID, username, and password are stored locally on your device to allow the app to sync your holdings automatically from MeroShare (CDSC).</li>
-    <li><strong>Portfolio and holdings data</strong> — your share quantities, average cost (WACC), and profit/loss figures fetched from MeroShare are stored locally on your device.</li>
+    <li><strong>Portfolio and holdings data</strong> — your share quantities, average cost (WACC), and profit/loss figures retrieved from MeroShare are stored locally on your device.</li>
     <li><strong>Live price data</strong> — current share prices fetched from the Nepal Stock Exchange (nepalstock.com) are cached locally on your device.</li>
     <li><strong>Exported files</strong> — if you use the export feature, analysis files (JSON/CSV) are saved to your device's private storage.</li>
   </ul>
@@ -43,7 +42,7 @@
   <h2>2. How We Use Your Data</h2>
   <p>Your data is used solely to display your portfolio within the app. Specifically:</p>
   <ul>
-    <li>MeroShare credentials are used only to authenticate with MeroShare (cdsc.com.np) on your behalf and retrieve your holdings.</li>
+    <li>Portfolio data retrieved from MeroShare is displayed within the app and stored locally on your device.</li>
     <li>NEPSE price data is fetched directly from nepalstock.com and displayed in the app.</li>
     <li>No data is used for advertising, analytics, or profiling.</li>
   </ul>
@@ -61,7 +60,7 @@
     <li>All data is stored locally on your device using Android's secure local storage.</li>
     <li>No data is transmitted to or stored on any Artha-operated server.</li>
     <li>Android backup is disabled for this app — your data is not backed up to Google Drive or any cloud service.</li>
-    <li>Your MeroShare credentials are stored only on your device and are never transmitted to anyone other than MeroShare directly.</li>
+    <li>MeroShare is accessed through a secure in-app browser (WebView) where you log in directly on CDSC's own website. The app never sees, stores, or transmits your MeroShare credentials.</li>
   </ul>
 
   <h2>5. Data Retention</h2>
@@ -70,7 +69,7 @@
   <h2>6. How to Delete Your Data</h2>
   <p>Since all data is stored locally on your device, you can delete it at any time:</p>
   <ul>
-    <li><strong>All data (credentials, portfolio cache, settings):</strong> Go to Android Settings → Apps → Artha → Storage → Clear Data.</li>
+    <li><strong>All data (portfolio cache, settings):</strong> Go to Android Settings → Apps → Artha → Storage → Clear Data.</li>
     <li><strong>Uninstall:</strong> Uninstalling the app removes all associated data from your device.</li>
   </ul>
 
