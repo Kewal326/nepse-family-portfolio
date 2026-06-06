@@ -1,0 +1,80 @@
+<svg width="1024" height="500" viewBox="0 0 1024 500" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Background -->
+  <rect width="1024" height="500" fill="#0D1B2A"/>
+
+  <!-- Grid -->
+  <line x1="0" y1="125" x2="1024" y2="125" stroke="#1E3A5F" stroke-width="1"/>
+  <line x1="0" y1="250" x2="1024" y2="250" stroke="#1E3A5F" stroke-width="1"/>
+  <line x1="0" y1="375" x2="1024" y2="375" stroke="#1E3A5F" stroke-width="1"/>
+  <line x1="256" y1="0" x2="256" y2="500" stroke="#1E3A5F" stroke-width="1"/>
+  <line x1="512" y1="0" x2="512" y2="500" stroke="#1E3A5F" stroke-width="1"/>
+  <line x1="768" y1="0" x2="768" y2="500" stroke="#1E3A5F" stroke-width="1"/>
+
+  <!-- Gold watermarks -->
+  <text x="80"  y="60"  font-size="28" text-anchor="middle" font-family="serif"      fill="#FFD700" opacity="0.14">₹</text>
+  <text x="200" y="45"  font-size="24" text-anchor="middle" font-family="sans-serif" fill="#FFD700" opacity="0.12">%</text>
+  <text x="900" y="55"  font-size="28" text-anchor="middle" font-family="serif"      fill="#FFD700" opacity="0.12">₹</text>
+  <text x="980" y="150" font-size="24" text-anchor="middle" font-family="sans-serif" fill="#FFD700" opacity="0.12">▲</text>
+  <text x="30"  y="380" font-size="24" text-anchor="middle" font-family="sans-serif" fill="#FFD700" opacity="0.12">%</text>
+  <text x="990" y="420" font-size="28" text-anchor="middle" font-family="serif"      fill="#FFD700" opacity="0.12">₹</text>
+  <polyline points="860,80 880,62 898,70 920,50" fill="none" stroke="#FFD700" stroke-width="2.5" opacity="0.14" stroke-linecap="round"/>
+  <polyline points="30,200 50,182 68,190 90,170" fill="none" stroke="#FFD700" stroke-width="2.5" opacity="0.12" stroke-linecap="round"/>
+
+  <!-- ═══ LEFT: Napha N chart icon (scaled) ═══ -->
+  <svg x="55" y="60" width="340" height="380" viewBox="0 0 512 512">
+    <!-- LEFT LEG -->
+    <line x1="90"  y1="390" x2="90"  y2="430" stroke="#26a69a" stroke-width="2"/><rect x="85"  y="398" width="10" height="24" fill="#26a69a" rx="1"/>
+    <line x1="100" y1="352" x2="100" y2="398" stroke="#ef5350" stroke-width="2"/><rect x="95"  y="360" width="10" height="28" fill="#ef5350" rx="1"/>
+    <line x1="110" y1="304" x2="110" y2="358" stroke="#26a69a" stroke-width="2"/><rect x="105" y="314" width="10" height="36" fill="#26a69a" rx="1"/>
+    <line x1="120" y1="258" x2="120" y2="310" stroke="#26a69a" stroke-width="2"/><rect x="115" y="268" width="10" height="34" fill="#26a69a" rx="1"/>
+    <line x1="130" y1="228" x2="130" y2="268" stroke="#ef5350" stroke-width="2"/><rect x="125" y="235" width="10" height="22" fill="#ef5350" rx="1"/>
+    <line x1="140" y1="178" x2="140" y2="232" stroke="#26a69a" stroke-width="2"/><rect x="135" y="188" width="10" height="36" fill="#26a69a" rx="1"/>
+    <line x1="150" y1="128" x2="150" y2="182" stroke="#26a69a" stroke-width="2"/><rect x="145" y="138" width="10" height="34" fill="#26a69a" rx="1"/>
+    <line x1="160" y1="72"  x2="160" y2="135" stroke="#26a69a" stroke-width="2.5"/><rect x="154" y="82"  width="12" height="44" fill="#26a69a" rx="1"/>
+    <!-- DIAGONAL -->
+    <line x1="176" y1="72"  x2="176" y2="148" stroke="#ef5350" stroke-width="2.5"/><rect x="171" y="83"  width="10" height="54" fill="#ef5350" rx="1"/>
+    <line x1="194" y1="112" x2="194" y2="178" stroke="#ef5350" stroke-width="2"/><rect x="189" y="122" width="10" height="44" fill="#ef5350" rx="1"/>
+    <line x1="212" y1="148" x2="212" y2="208" stroke="#26a69a" stroke-width="2"/><rect x="207" y="157" width="10" height="28" fill="#26a69a" rx="1"/>
+    <line x1="230" y1="188" x2="230" y2="255" stroke="#ef5350" stroke-width="2"/><rect x="225" y="198" width="10" height="46" fill="#ef5350" rx="1"/>
+    <line x1="248" y1="232" x2="248" y2="292" stroke="#ef5350" stroke-width="2"/><rect x="243" y="242" width="10" height="38" fill="#ef5350" rx="1"/>
+    <line x1="266" y1="270" x2="266" y2="322" stroke="#26a69a" stroke-width="2"/><rect x="261" y="278" width="10" height="30" fill="#26a69a" rx="1"/>
+    <line x1="284" y1="302" x2="284" y2="368" stroke="#ef5350" stroke-width="2"/><rect x="279" y="312" width="10" height="46" fill="#ef5350" rx="1"/>
+    <line x1="302" y1="338" x2="302" y2="398" stroke="#ef5350" stroke-width="2"/><rect x="297" y="348" width="10" height="40" fill="#ef5350" rx="1"/>
+    <line x1="322" y1="368" x2="322" y2="435" stroke="#ef5350" stroke-width="2.5"/><rect x="316" y="378" width="12" height="48" fill="#ef5350" rx="1"/>
+    <!-- RIGHT LEG -->
+    <line x1="352" y1="365" x2="352" y2="435" stroke="#26a69a" stroke-width="2.5"/><rect x="346" y="375" width="12" height="48" fill="#26a69a" rx="1"/>
+    <line x1="362" y1="335" x2="362" y2="388" stroke="#ef5350" stroke-width="2"/><rect x="357" y="343" width="10" height="32" fill="#ef5350" rx="1"/>
+    <line x1="372" y1="285" x2="372" y2="338" stroke="#26a69a" stroke-width="2"/><rect x="367" y="294" width="10" height="34" fill="#26a69a" rx="1"/>
+    <line x1="382" y1="238" x2="382" y2="288" stroke="#26a69a" stroke-width="2"/><rect x="377" y="247" width="10" height="32" fill="#26a69a" rx="1"/>
+    <line x1="392" y1="208" x2="392" y2="248" stroke="#ef5350" stroke-width="2"/><rect x="387" y="215" width="10" height="22" fill="#ef5350" rx="1"/>
+    <line x1="402" y1="158" x2="402" y2="210" stroke="#26a69a" stroke-width="2"/><rect x="397" y="167" width="10" height="34" fill="#26a69a" rx="1"/>
+    <line x1="412" y1="110" x2="412" y2="162" stroke="#26a69a" stroke-width="2"/><rect x="407" y="119" width="10" height="34" fill="#26a69a" rx="1"/>
+    <line x1="422" y1="72"  x2="422" y2="118" stroke="#26a69a" stroke-width="2.5"/><rect x="416" y="82"  width="12" height="28" fill="#26a69a" rx="1"/>
+  </svg>
+
+  <!-- Thin vertical divider -->
+  <line x1="430" y1="60" x2="430" y2="440" stroke="#1E3A5F" stroke-width="1.5"/>
+
+  <!-- ═══ RIGHT: Text content ═══ -->
+
+  <!-- App name -->
+  <text x="720" y="195" font-size="110" text-anchor="middle" fill="white"
+        font-family="Arial,sans-serif" font-weight="bold" letter-spacing="10">NAPHA</text>
+
+  <!-- Teal accent line -->
+  <line x1="490" y1="225" x2="950" y2="225" stroke="#26a69a" stroke-width="2" opacity="0.6"/>
+
+  <!-- Tagline -->
+  <text x="720" y="278" font-size="32" text-anchor="middle" fill="#26a69a"
+        font-family="Arial,sans-serif" letter-spacing="2">NEPSE Portfolio Tracker</text>
+
+  <!-- Description -->
+  <text x="720" y="335" font-size="24" text-anchor="middle" fill="#8899aa"
+        font-family="Arial,sans-serif">Sync your MeroShare portfolio automatically</text>
+
+  <!-- Website -->
+  <text x="720" y="415" font-size="22" text-anchor="middle" fill="#FFD700"
+        font-family="Arial,sans-serif" opacity="0.75" letter-spacing="1">napha.app</text>
+
+</svg>
