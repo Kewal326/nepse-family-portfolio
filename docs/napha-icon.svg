@@ -45,6 +45,6 @@
   <rect x="244" y="255" width="22" height="46" fill="#FFD700" rx="2"/>
   <rect x="272" y="239" width="22" height="62" fill="#FFD700" rx="2"/>
   <rect x="300" y="223" width="22" height="78" fill="#FFD700" rx="2"/>
-  <!-- ARTHA text -->
-  <text x="256" y="465" font-size="62" text-anchor="middle" fill="white" font-family="Arial,sans-serif" font-weight="bold" letter-spacing="6">ARTHA</text>
+  <!-- NAPHA text -->
+  <text x="256" y="465" font-size="62" text-anchor="middle" fill="white" font-family="Arial,sans-serif" font-weight="bold" letter-spacing="6">NAPHA</text>
 </svg>
