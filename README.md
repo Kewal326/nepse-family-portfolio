@@ -1,8 +1,8 @@
-# Artha: NEPSE Portfolio Tracker
+# Napha: NEPSE Portfolio Tracker
 
 Android-first portfolio app for consolidating multiple family MeroShare/NEPSE accounts into a single unified view.
 
-**Package:** `com.artha.app`
+**Package:** `com.napha.app`
 
 ---
 
@@ -91,7 +91,7 @@ Then start Metro:
 npm run start:dev-client
 ```
 
-After this, use the installed **Artha** debug app on the phone instead of Expo Go.
+After this, use the installed **Napha** debug app on the phone instead of Expo Go.
 
 ### Wireless debugging (no USB)
 
@@ -126,7 +126,7 @@ cd android
 ./gradlew assembleRelease
 ```
 
-Output: `android/app/build/outputs/apk/release/artha.apk` (~26 MB)
+Output: `android/app/build/outputs/apk/release/napha.apk` (~26 MB)
 
 ### Share APK over Wi-Fi
 
@@ -145,7 +145,7 @@ ipconfig getifaddr en0
 Then open this URL on the phone's browser to download:
 
 ```txt
-http://YOUR_MAC_WIFI_IP:9876/artha.apk
+http://YOUR_MAC_WIFI_IP:9876/napha.apk
 ```
 
 ### Build optimisations already configured
@@ -188,7 +188,7 @@ npm run start:dev-client
 /Users/kewal.agrawal/Library/Android/sdk/platform-tools/adb reverse tcp:8081 tcp:8081
 ```
 
-3. Open **Artha** on the phone → tap **Start sync** → log into MeroShare.
+3. Open **Napha** on the phone → tap **Start sync** → log into MeroShare.
 
 4. Navigate to the WACC / Share Values / holdings report page and tap MeroShare's download button.
 

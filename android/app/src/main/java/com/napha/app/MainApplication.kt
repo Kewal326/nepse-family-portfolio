@@ -1,4 +1,4 @@
-package com.artha.app
+package com.napha.app
 
 import android.app.Application
 import android.content.res.Configuration

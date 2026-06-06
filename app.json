@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Artha: NEPSE Portfolio Tracker",
-    "slug": "artha-nepse-portfolio-tracker",
+    "name": "Napha: NEPSE Portfolio Tracker",
+    "slug": "napha-nepse-portfolio-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -23,7 +23,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize",
-      "package": "com.artha.app"
+      "package": "com.napha.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"

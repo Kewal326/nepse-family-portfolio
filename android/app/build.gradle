@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.artha.app'
+    namespace 'com.napha.app'
     defaultConfig {
-        applicationId 'com.artha.app'
+        applicationId 'com.napha.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -142,7 +142,7 @@ android {
     }
     applicationVariants.all { variant ->
         variant.outputs.all {
-            outputFileName = "artha.apk"
+            outputFileName = "napha.apk"
         }
     }
 }
